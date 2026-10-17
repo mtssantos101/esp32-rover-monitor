@@ -4,6 +4,10 @@ Projeto acadêmico para ler temperatura, umidade e distância no ESP32, transmit
 
 O dashboard também pode ser usado sem o ESP32: um simulador Python envia leituras fictícias ao backend.
 
+## Dashboard
+
+![Dashboard web do ESP32 Rover, com leituras de temperatura, umidade, distância e gráficos em tempo real](assets/image.png)
+
 ## Arquitetura atual
 
 ```text
