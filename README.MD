@@ -1,574 +1,117 @@
-# ESP32 Sensor Monitor
+# ESP32 Rover — monitoramento de sensores
 
-Projeto de monitoramento de sensores utilizando **ESP32 + Bluetooth Low Energy (BLE) + Python + WebSocket + CSV + Dashboard Web**.
+Projeto acadêmico para ler temperatura, umidade e distância no ESP32, transmitir as leituras por Bluetooth Low Energy (BLE) e exibi-las em um dashboard web. O backend recebe os dados por HTTP, grava um histórico em CSV e publica atualizações em tempo real via Socket.IO.
 
-O projeto foi desenvolvido de forma incremental. Atualmente, a parte de monitoramento pode ser executada **sem o ESP32**, utilizando um simulador que gera dados de temperatura e umidade.
+O dashboard também pode ser usado sem o ESP32: um simulador Python envia leituras fictícias ao backend.
 
-Quando o ESP32 estiver disponível, o simulador poderá ser substituído pelo cliente BLE (`esp-client`).
-
----
-
-## Arquitetura
-
-Atualmente, o fluxo de dados é:
+## Arquitetura atual
 
 ```text
-┌──────────────────┐
-│    Simulator     │
-│                  │
-│ Temperature      │
-│ Humidity         │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────────────┐
-│       ESP32 Monitor      │
-│                          │
-│ Flask                    │
-│ Flask-SocketIO           │
-│                          │
-│ ┌────────────┐           │
-│ │    CSV     │           │
-│ └────────────┘           │
-│                          │
-│ ┌────────────┐           │
-│ │ WebSocket  │───────────┼──────┐
-│ └────────────┘           │      │
-└──────────────────────────┘      │
-                                  ▼
-                         ┌─────────────────┐
-                         │     Browser     │
-                         │                 │
-                         │    Chart.js     │
-                         │                 │
-                         │  Dashboard      │
-                         └─────────────────┘
+ESP32 (esp.c) ── BLE ──> cliente Python (client/) ── HTTP ──┐
+                                                            v
+Simulador (monitor/) ───────────────────────────────────> Flask (monitor/)
+                                                           ├── sensors.csv
+                                                           └── Socket.IO ──> navegador
 ```
 
-A arquitetura planejada para a versão com ESP32 será:
+O simulador e o cliente BLE são fontes alternativas de dados. O simulador não é iniciado automaticamente pelo servidor. O cliente BLE e o firmware estão no projeto, mas dependem do ESP32 e do hardware configurados para funcionar.
 
-```text
-┌──────────────┐
-│    ESP32     │
-│              │
-│   Sensors    │
-└──────┬───────┘
-       │
-       │ BLE
-       ▼
-┌─────────────────┐
-│  Python Client  │
-│     Bleak       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ ESP32 Monitor   │
-│                 │
-│ CSV + WebSocket │
-└────────┬────────┘
-         │
-         ▼
-      Browser
-```
-
----
-
-# Estrutura do projeto
+## Estrutura do projeto
 
 ```text
 sis-emb/
-│
-├── esp32-monitor/
-│   │
-│   ├── app.py
-│   ├── simulator.py
-│   ├── requirements.txt
-│   ├── sensors.csv
-│   │
-│   └── templates/
-│       └── index.html
-│
-└── esp-client/
-    │
-    ├── client.py
-    ├── esp.c
-    └── requirements.txt
+├── esp.c                       # Firmware Arduino para o ESP32
+├── client/
+│   ├── client.py                # Recebe notificações BLE e as envia por HTTP
+│   ├── scan_ble.py              # Procura o ESP32 anunciado por BLE
+│   ├── test_ble.py              # Testa conexão e notificações BLE
+│   └── requirements.txt
+└── monitor/
+    ├── app.py                  # Backend Flask, API, CSV e Socket.IO
+    ├── simulator.py            # Gera leituras fictícias e chama a API
+    ├── requirements.txt
+    └── templates/index.html    # Dashboard
 ```
 
-## `esp32-monitor`
+O arquivo `sensors.csv` é criado no diretório de trabalho do backend quando chega a primeira leitura. Para mantê-lo em `monitor/`, execute os comandos a partir desse diretório.
 
-Responsável pelo servidor, armazenamento dos dados e dashboard.
+## Requisitos
 
-### `app.py`
+- Python 3.10 ou superior e `pip`;
+- navegador moderno;
+- para BLE: adaptador Bluetooth compatível e ESP32 com o firmware carregado;
+- para compilar o firmware: Arduino IDE ou outro ambiente com suporte à placa ESP32, além das bibliotecas `DHT sensor library` e `ESP32 BLE Arduino` compatíveis com o core instalado.
 
-Servidor Flask responsável por:
+## Executar usando dados simulados
 
-* disponibilizar o dashboard;
-* disponibilizar a API de sensores;
-* executar o loop de aquisição;
-* salvar os dados no CSV;
-* enviar os dados em tempo real através de WebSocket.
-
-### `simulator.py`
-
-Simula os dados que futuramente serão enviados pelo ESP32.
-
-Atualmente gera:
-
-* temperatura;
-* umidade;
-* timestamp.
-
-### `sensors.csv`
-
-Arquivo utilizado para persistir as leituras.
-
-Exemplo:
-
-```csv
-timestamp,temperature,humidity
-2026-10-07T22:30:01,27.4,63.2
-2026-10-07T22:30:02,27.5,63.8
-2026-10-07T22:30:03,27.3,63.4
-```
-
-### `templates/index.html`
-
-Dashboard web responsável pela visualização dos dados.
-
-Utiliza:
-
-* HTML;
-* JavaScript;
-* Chart.js;
-* Socket.IO.
-
----
-
-# `esp-client`
-
-Responsável pela comunicação com o ESP32 através de Bluetooth Low Energy.
-
-### `client.py`
-
-Cliente Python que futuramente será responsável por:
-
-1. procurar o ESP32;
-2. estabelecer conexão BLE;
-3. receber notificações;
-4. interpretar os dados enviados pelo ESP32;
-5. encaminhar os dados para o monitor.
-
-### `esp.c`
-
-Código que será executado no ESP32.
-
-Atualmente o ESP32 deverá funcionar como um servidor BLE, disponibilizando uma característica para os dados dos sensores.
-
----
-
-# Requisitos
-
-## Computador
-
-É necessário ter:
-
-* Python 3.10 ou superior;
-* `pip`;
-* Bluetooth habilitado no computador;
-* navegador web moderno.
-
-Para verificar o Python:
+Abra um terminal na raiz do repositório e prepare o backend:
 
 ```bash
-python3 --version
-```
-
-Exemplo:
-
-```text
-Python 3.12.3
-```
-
----
-
-# 1. Clonar o projeto
-
-Caso o projeto esteja em um repositório Git:
-
-```bash
-git clone <URL_DO_REPOSITORIO>
-```
-
-Entre no diretório:
-
-```bash
-cd sis-emb
-```
-
----
-
-# 2. Criar o ambiente virtual
-
-É recomendado utilizar um ambiente virtual Python separado para cada aplicação.
-
-## ESP32 Monitor
-
-Entre no diretório:
-
-```bash
-cd esp32-monitor
-```
-
-Crie o ambiente virtual:
-
-```bash
+cd monitor
 python3 -m venv .venv
-```
-
-Ative:
-
-```bash
 source .venv/bin/activate
-```
-
-No terminal deverá aparecer algo semelhante a:
-
-```text
-(.venv) user@computer:~/sis-emb/esp32-monitor$
-```
-
----
-
-# 3. Instalar as dependências do monitor
-
-Com o ambiente virtual ativado:
-
-```bash
 pip install -r requirements.txt
 ```
 
-As principais dependências são:
+O arquivo `monitor/requirements.txt` inclui as dependências do backend e do simulador. As versões de `Flask-SocketIO` e `requests` estão fixadas para tornar a instalação reproduzível.
 
-```text
-Flask
-Flask-SocketIO
-```
-
-Para verificar:
-
-```bash
-pip list
-```
-
----
-
-# 4. Executar o monitor
-
-Ainda dentro de:
-
-```text
-esp32-monitor/
-```
-
-execute:
+Inicie o servidor no primeiro terminal:
 
 ```bash
 python app.py
 ```
 
-O servidor será iniciado em:
+Em outro terminal, inicie o simulador:
 
-```text
-http://localhost:5000
+```bash
+cd monitor
+source .venv/bin/activate
+python simulator.py
 ```
 
-Abra esse endereço no navegador.
+Abra <http://localhost:5000>. O simulador envia temperatura, umidade, duas distâncias e estado de obstáculo aproximadamente uma vez por segundo. Para parar cada processo, use `Ctrl+C` no terminal correspondente.
 
----
+## Executar com ESP32
 
-# 5. Funcionamento do simulador
+1. Carregue `esp.c` no ESP32 com as bibliotecas e a placa configuradas. O firmware anuncia o dispositivo como `ESP32-SENSOR`, com serviço BLE `4fafc201-1fb5-459e-8fcc-c5c9c331914b` e característica `beb5483e-36e1-4688-b7f5-ea07361b26a8`.
+2. Inicie o backend como descrito acima. Não inicie o simulador ao mesmo tempo, a menos que queira misturar leituras simuladas e reais no mesmo histórico e dashboard.
+3. Em outro terminal, instale e execute o cliente:
 
-Atualmente o `app.py` gera dados simulados automaticamente.
+   ```bash
+   cd client
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   python client.py
+   ```
 
-Os dados são gerados aproximadamente a cada segundo:
+O cliente procura o dispositivo, recebe notificações BLE contendo JSON e envia os campos recebidos para `http://127.0.0.1:5000/api/sensors`. O dashboard deve ser aberto no mesmo computador do backend. Para testar apenas a descoberta BLE, use `python scan_ble.py`; `python test_ble.py` tenta conectar e aguarda notificações por 30 segundos.
+
+No Windows, ative o ambiente virtual com `.venv\Scripts\activate` em vez de `source .venv/bin/activate`. Os comandos `python3` podem ser substituídos por `python`, conforme a instalação.
+
+## API e dados
+
+- `GET /api/sensors?limit=100&offset=0`: retorna uma página do histórico em JSON, em ordem cronológica. `limit` aceita de 1 a 1000 registros (padrão: 100); `offset` seleciona páginas anteriores a partir do registro mais recente (padrão: 0; máximo: 10000). Por exemplo, `limit=100&offset=100` retorna os 100 registros imediatamente anteriores à página mais recente.
+- `POST /api/sensors`: recebe uma leitura JSON, acrescenta o timestamp no servidor, grava no CSV e emite o evento Socket.IO `sensor_data`. Retorna HTTP `201` em caso de sucesso.
+
+Exemplo de corpo aceito:
 
 ```json
 {
-    "timestamp": "2026-10-07T22:30:01",
-    "temperature": 27.4,
-    "humidity": 63.2
+  "temperature": 27.4,
+  "humidity": 63.2,
+  "distance1": 35.1,
+  "distance2": 18.7,
+  "obstacle": true
 }
 ```
 
-Esses dados possuem dois destinos:
-
-### Persistência
-
-São armazenados em:
-
-```text
-sensors.csv
-```
-
-### Dashboard
-
-São enviados através de WebSocket para o navegador.
-
-Isso permite que o dashboard seja atualizado em tempo real sem precisar recarregar a página.
-
----
-
-# 6. Dashboard
-
-Após executar:
-
-```bash
-python app.py
-```
-
-abra:
-
-```text
-http://localhost:5000
-```
-
-O dashboard apresenta:
-
-* temperatura atual;
-* umidade atual;
-* gráfico de temperatura;
-* gráfico de umidade;
-* atualização em tempo real.
-
-O navegador recebe novos dados através do Socket.IO.
-
-Fluxo:
-
-```text
-Python
-  │
-  │ sensor_data
-  ▼
-Socket.IO
-  │
-  ▼
-Browser
-  │
-  ├── Temperatura
-  ├── Umidade
-  └── Gráficos
-```
-
----
-
-# 7. Cliente BLE
-
-A pasta `esp-client` será utilizada quando o ESP32 estiver disponível.
-
-Entre no diretório:
-
-```bash
-cd ../esp-client
-```
-
-Crie um ambiente virtual:
-
-```bash
-python3 -m venv .venv
-```
-
-Ative:
-
-```bash
-source .venv/bin/activate
-```
-
-Instale as dependências:
-
-```bash
-pip install -r requirements.txt
-```
-
-O cliente utiliza a biblioteca `bleak` para comunicação Bluetooth Low Energy.
-
----
-
-# 8. Verificar dispositivos BLE
-
-No Linux, o Bluetooth pode ser testado através do:
-
-```bash
-bluetoothctl
-```
-
-Dentro do programa:
-
-```text
-power on
-scan on
-```
-
-Quando o ESP32 estiver ligado, deverá aparecer algo semelhante a:
-
-```text
-Device AA:BB:CC:DD:EE:FF ESP32-SENSOR
-```
-
-Para parar a busca:
-
-```text
-scan off
-```
-
-E sair:
-
-```text
-exit
-```
-
----
-
-# 9. Fluxo planejado com o ESP32
-
-Quando o ESP32 estiver disponível, o fluxo será:
-
-```text
-ESP32
-  │
-  │ BLE Notification
-  ▼
-Python Client
-  │
-  │ JSON
-  ▼
-ESP32 Monitor
-  │
-  ├──────────────► sensors.csv
-  │
-  └──────────────► WebSocket
-                         │
-                         ▼
-                      Browser
-```
-
-O ESP32 deverá enviar dados em um formato semelhante a:
-
-```json
-{
-    "temperature": 27.4,
-    "humidity": 63.2
-}
-```
-
-O cliente Python será responsável por receber esses dados e encaminhá-los para o monitor.
-
----
-
-# 10. Desenvolvimento
-
-Para trabalhar no projeto:
-
-## Terminal 1 — Monitor
-
-```bash
-cd esp32-monitor
-source .venv/bin/activate
-python app.py
-```
-
-## Terminal 2 — Cliente BLE
-
-Quando o ESP32 estiver disponível:
-
-```bash
-cd esp-client
-source .venv/bin/activate
-python client.py
-```
-
-## Navegador
-
-```text
-http://localhost:5000
-```
-
----
-
-# 11. Tecnologias
-
-### ESP32
-
-* ESP32-WROOM-32
-* C/C++
-* Bluetooth Low Energy
-
-### Backend
-
-* Python
-* Flask
-* Flask-SocketIO
-* Bleak
-
-### Frontend
-
-* HTML
-* JavaScript
-* Chart.js
-* Socket.IO
-
-### Persistência
-
-* CSV
-
----
-
-# Próximos passos
-
-O projeto está sendo desenvolvido incrementalmente.
-
-### Concluído
-
-* [x] Estrutura inicial do projeto
-* [x] Simulador de sensores
-* [x] Persistência em CSV
-* [x] Servidor Flask
-* [x] Dashboard web
-* [x] Gráficos com Chart.js
-* [x] Atualização em tempo real via WebSocket
-
-### Próximas etapas
-
-* [ ] Implementar GATT Server no ESP32
-* [ ] Implementar comunicação BLE
-* [ ] Conectar `esp-client` ao ESP32
-* [ ] Receber notificações BLE
-* [ ] Substituir o simulador pelos dados reais
-* [ ] Adicionar status da conexão BLE
-* [ ] Adicionar timestamp da última leitura
-* [ ] Melhorar o dashboard
-* [ ] Avaliar substituição do CSV por banco de dados
-* [ ] Avaliar integração com Grafana
-
----
-
-# Execução rápida
-
-Depois que tudo estiver configurado, para iniciar o dashboard:
-
-```bash
-cd esp32-monitor
-
-source .venv/bin/activate
-
-python app.py
-```
-
-Depois acesse:
-
-```text
-http://localhost:5000
-```
-
-O sistema começará a gerar dados simulados e o dashboard será atualizado automaticamente em tempo real.
+Temperatura, umidade e distâncias podem ser `null` quando uma leitura não estiver disponível. O dashboard mostra os valores atuais e gráficos com até 30 pontos recentes por sensor. O CSV mantém as leituras recebidas entre execuções.
+
+## Tecnologias
+
+- Firmware: C++ para ESP32, BLE, sensor DHT e sensores ultrassônicos;
+- cliente: Python, Bleak e Requests;
+- backend: Python, Flask e Flask-SocketIO;
+- dashboard: HTML, JavaScript, Chart.js e Socket.IO;
+- histórico: CSV.
