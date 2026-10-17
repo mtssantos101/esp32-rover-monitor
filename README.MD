@@ -1,4 +1,4 @@
-# ESP32 Rover — monitoramento de sensores
+# ESP32 Rover Monitor — monitoramento de sensores
 
 Projeto acadêmico para ler temperatura, umidade e distância no ESP32, transmitir as leituras por Bluetooth Low Energy (BLE) e exibi-las em um dashboard web. O backend recebe os dados por HTTP, grava um histórico em CSV e publica atualizações em tempo real via Socket.IO.
 
@@ -23,7 +23,7 @@ O simulador e o cliente BLE são fontes alternativas de dados. O simulador não 
 ## Estrutura do projeto
 
 ```text
-sis-emb/
+esp32-rover-monitor/
 ├── esp.c                       # Firmware Arduino para o ESP32
 ├── client/
 │   ├── client.py                # Recebe notificações BLE e as envia por HTTP
